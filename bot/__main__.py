@@ -14,6 +14,7 @@ from bot.handlers import (
     start_account_router,
     utils_router,
 )
+from bot.menu_commands import set_default_commands
 from bot.middlewares.db import DbSessionMiddleware
 
 
@@ -49,6 +50,7 @@ async def main():
         utils_router,
     )
 
+    await set_default_commands(bot)
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
