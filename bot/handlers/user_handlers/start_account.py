@@ -162,7 +162,12 @@ async def user_info_handler(
 ):
     await callback.answer()
     account = await AccountDAO.get_account(session=session, id=callback_data.identification)
-    await state.update_data(account_id=account.id, api_id=account.api_id, api_hash=account.api_hash)
+    await state.update_data(
+        account_id=account.id,
+        api_id=account.api_id,
+        api_hash=account.api_hash,
+        phone=account.phone,
+    )
 
     info, builder = account_info(account)
     await callback.message.edit_text(
@@ -194,14 +199,7 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
-    try:
-        await client.connect()
-    except EOFError:
-        await client.sign_in(
-            phone=account.phone,
-            password=account.fa2,
-        )
-        await client.connect()
+    await client.connect()
 
     users = await UserDAO.get_users_by_account(
         session=session,
