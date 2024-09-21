@@ -262,6 +262,8 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                             username=user,
                         )
                         await asyncio.sleep(random.randint(10, 20))
+                    except ValueError:
+                        await asyncio.sleep(random.randint(10, 20))
                     except RPCError as e:
                         # Поймали ошибку от Телеграм
                         await callback.message.answer(
