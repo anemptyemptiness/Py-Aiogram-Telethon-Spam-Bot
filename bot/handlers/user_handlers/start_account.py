@@ -194,7 +194,7 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                      "Пожалуйста, зайдите на аккаунт и проверьте, нет ли визуально каких-либо ошибок?")
 
     client = TelegramClient(
-        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}.session",
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
@@ -336,7 +336,7 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
     account = await AccountDAO.get_account(session=session, id=data["account_id"])
 
     client = TelegramClient(
-        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}.session",
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
