@@ -198,8 +198,7 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
-    )
-    client.start(phone=account.phone, password=account.fa2)
+    ).start(phone=account.phone, password=account.fa2)
 
     users = await UserDAO.get_users_by_account(
         session=session,
@@ -340,8 +339,7 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
-    )
-    await client.connect()
+    ).start(phone=account.phone, password=account.fa2)
 
     async with client:
         await client.log_out()
