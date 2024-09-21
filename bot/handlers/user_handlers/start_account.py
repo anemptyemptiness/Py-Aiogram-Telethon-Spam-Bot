@@ -201,7 +201,14 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
-    await client.connect()
+    try:
+        await client.connect()
+    except EOFError:
+        await client.sign_in(
+            phone=account.phone,
+            password=account.fa2,
+        )
+        await client.connect()
 
     users = await UserDAO.get_users_by_account(
         session=session,
