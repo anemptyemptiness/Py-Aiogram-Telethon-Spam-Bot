@@ -11,14 +11,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from teleredis import RedisSession
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, RPCError
 
-from bot.config import settings
 from bot.callbacks.account import AccountCallback, PaginationCallbackData
 from bot.db.models import Account
 from bot.db.account.requests import AccountDAO
@@ -191,12 +188,8 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                      "но по сути всё хорошо, это не критично\n\n"
                      "Пожалуйста, зайдите на аккаунт и проверьте, нет ли визуально каких-либо ошибок?")
 
-    tele_session = RedisSession(
-        session_name=f"{account.api_id}_{account.phone[1:]}",
-        redis_connection=Redis(host=settings.REDIS_HOST),
-    )
     client = TelegramClient(
-        session=tele_session,
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
@@ -344,12 +337,8 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
     data = await state.get_data()
     account = await AccountDAO.get_account(session=session, id=data["account_id"])
 
-    tele_session = RedisSession(
-        session_name=f"{account.api_id}_{account.phone[1:]}",
-        redis_connection=Redis(host=settings.REDIS_HOST),
-    )
     client = TelegramClient(
-        session=tele_session,
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
         api_id=account.api_id,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",

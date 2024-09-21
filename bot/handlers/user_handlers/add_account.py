@@ -5,13 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
-from teleredis import RedisSession
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-from bot.config import settings
 from bot.db.account.requests import AccountDAO
 from bot.db.users.requests import UserDAO
 from bot.fsm.fsm import AddAccountSG
@@ -85,12 +82,8 @@ async def set_db_handler(message: Message, state: FSMContext, bot: Bot):
              "⚠️ Пожалуйста, пришлите мне код без лишних пробелов и символов!",
     )
 
-    tele_session = RedisSession(
-        session_name=f"{data['api_id']}_{data['phone'][1:]}",
-        redis_connection=Redis(host=settings.REDIS_HOST),
-    )
     client = TelegramClient(
-        session=tele_session,
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
         api_id=data['api_id'],
         api_hash=data['api_hash'],
         system_version="4.16.30-vxCUSTOM",
@@ -114,12 +107,8 @@ async def set_code_handler(message: Message, state: FSMContext, session: AsyncSe
         reply_markup=builder.as_markup(),
     )
 
-    tele_session = RedisSession(
-        session_name=f"{data['api_id']}_{data['phone'][1:]}",
-        redis_connection=Redis(host=settings.REDIS_HOST),
-    )
     client = TelegramClient(
-        session=tele_session,
+        session=f"bot/sessions/{data['api_id']}_{data['phone'][1:]}",
         api_id=data['api_id'],
         api_hash=data['api_hash'],
         system_version="4.16.30-vxCUSTOM",
