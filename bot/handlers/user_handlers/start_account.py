@@ -348,7 +348,7 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         system_version="4.16.30-vxCUSTOM",
     )
     await client.connect()
-    
+
     async with client:
         await client.log_out()
 
@@ -357,15 +357,19 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         api_id=account.api_id,
         api_hash=account.api_hash,
     )
-    async with aiofiles.open(
-            file=f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt",
-            mode="r+"
-    ) as file:
-        await file.writelines(map(lambda x: x + "\n", unsend_accounts))
 
-    await callback.message.answer_document(
-        document=FSInputFile(path=Path(f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt"))
-    )
+    if unsend_accounts:
+        # Если есть аккаунты, до которых не дошла рассылка из-за блокировки,
+        # то собираем эти аккаунты в .txt и отправляем, чтобы дальше работать с ними
+        async with aiofiles.open(
+                file=f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt",
+                mode="r+"
+        ) as file:
+            await file.writelines(map(lambda x: x + "\n", unsend_accounts))
+        await callback.message.answer_document(
+            document=FSInputFile(path=Path(f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt"))
+        )
+
     await AccountDAO.delete_account(session=session, id=data["account_id"])
     await SessionDAO.delete_session(api_id=account.api_id, phone=account.phone)
 
