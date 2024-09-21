@@ -264,6 +264,7 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                         await asyncio.sleep(random.randint(10, 20))
                     except ValueError:
                         await asyncio.sleep(random.randint(10, 20))
+                        continue
                     except RPCError as e:
                         # Поймали ошибку от Телеграм
                         await callback.message.answer(
@@ -274,7 +275,8 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                             text="Ошибка:\n\n"
                                  f"{e}"
                         )
-                        break
+                        await asyncio.sleep(random.randint(10, 20))
+                        continue
                     except KeyError:
                         # Просим создать спам-сообщение для рассылки
                         await callback.message.answer(
@@ -292,10 +294,16 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                             text="Ошибка:\n\n"
                                  f"{e}"
                         )
-                        break
+                        await asyncio.sleep(random.randint(10, 20))
+                        continue
             else:
                 # Разослали 10 людям сообщение, спим 1.5 суток, чтобы аккаунт отдохнул,
                 # иначе Телеграм может дать бан за частую рассылку
+                await callback.message.answer(
+                    text=f"✅ Бот разослал сообщение {count} раз ({count} людей)\n"
+                         "💤 Бот в спячке на 1.5 дня (36 часов)"
+                )
+
                 count = 0
                 await asyncio.sleep(60 * 60 * 24 * 1.5)  # спим 1.5 дня (36 часов)
 
