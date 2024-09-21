@@ -5,8 +5,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     TOKEN: str
 
-    PATH_TO_PROJECT: str
-
     DB_NAME: str
     DB_USER: str
     DB_PASS: str

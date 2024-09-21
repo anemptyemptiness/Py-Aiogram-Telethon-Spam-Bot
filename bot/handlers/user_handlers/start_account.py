@@ -2,12 +2,14 @@ import asyncio
 import random
 from datetime import datetime, UTC, timedelta
 from math import ceil
+from pathlib import Path
 
+import aiofiles
 from aiogram import Router, F, Bot
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
-from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +18,7 @@ from teleredis import RedisSession
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, RPCError
 
-from bot import settings
+from bot.config import settings
 from bot.callbacks.account import AccountCallback, PaginationCallbackData
 from bot.db.models import Account
 from bot.db.account.requests import AccountDAO
@@ -301,6 +303,8 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
 @router.callback_query(StateFilter(AccountInfoSG.accounts), F.data == "delete_account")
 async def delete_account_handler(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.answer()
+    await callback.message.delete_reply_markup()
+
     data = await state.get_data()
     account = await AccountDAO.get_account(session=session, id=data["account_id"])
 
@@ -316,10 +320,25 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
     )
     async with client:
         await client.log_out()
+
+    unsend_accounts = await UserDAO.get_users_by_account(
+        session=session,
+        api_id=account.api_id,
+        api_hash=account.api_hash,
+    )
+    async with aiofiles.open(
+            file=f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt",
+            mode="r+"
+    ) as file:
+        await file.writelines(map(lambda x: x + "\n", unsend_accounts))
+
+    await callback.message.answer_document(
+        document=FSInputFile(path=Path(f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt"))
+    )
     await AccountDAO.delete_account(session=session, id=data["account_id"])
     await SessionDAO.delete_session(api_id=account.api_id, phone=account.phone)
 
-    await callback.message.edit_text(
+    await callback.message.answer(
         text=f"Аккаунт <b>@{account.username}</b> успешно удален ✅\n\n"
              "🖥 Аккаунты:",
         reply_markup=await paginator(session, data["page"])

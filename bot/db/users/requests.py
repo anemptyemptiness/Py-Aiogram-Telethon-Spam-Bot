@@ -27,6 +27,7 @@ class UserDAO:
             session: AsyncSession,
             api_id: int | str,
             api_hash: str,
+            is_sent: bool = False,
     ):
         query = (
             select(User.username)
@@ -35,7 +36,7 @@ class UserDAO:
             .where(
                 Account.api_id == api_id,
                 Account.api_hash == api_hash,
-                User.is_sent == False,
+                User.is_sent == is_sent,
             )
             .order_by(User.id)
         )
