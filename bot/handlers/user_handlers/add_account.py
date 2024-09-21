@@ -114,39 +114,40 @@ async def set_code_handler(message: Message, state: FSMContext, session: AsyncSe
         system_version="4.16.30-vxCUSTOM",
     )
     await client.connect()
-    try:
-        await client.sign_in(
-            phone=data['phone'],
-            code=code,
-            phone_code_hash=data['phone_code_hash'],
+    async with client:
+        try:
+            await client.sign_in(
+                phone=data['phone'],
+                code=code,
+                phone_code_hash=data['phone_code_hash'],
+            )
+            await success_message
+        except AttributeError:
+            await client.sign_in(
+                phone=data['phone'],
+                code=code,
+                phone_code_hash=data['phone_code_hash'],
+            )
+        except SessionPasswordNeededError:
+            await client.sign_in(
+                password=data['password'],
+            )
+            await success_message
+        except Exception:
+            await message.answer(
+                text="⚠️ Во время подключения аккаунт произошла ошибка!\n"
+                     "⚠️ Свяжитесь с разработчиком!"
+            )
+        account = await client.get_me()
+        await AccountDAO.add_account(
+            session=session,
+            api_id=data["api_id"],
+            api_hash=data["api_hash"],
+            phone=data["phone"],
+            db_name=data["db_name"],
+            username=account.username or f"account_{account.id}",
+            fa2=data["password"],
         )
-        await success_message
-    except AttributeError:
-        await client.sign_in(
-            phone=data['phone'],
-            code=code,
-            phone_code_hash=data['phone_code_hash'],
-        )
-    except SessionPasswordNeededError:
-        await client.sign_in(
-            password=data['password'],
-        )
-        await success_message
-    except Exception:
-        await message.answer(
-            text="⚠️ Во время подключения аккаунт произошла ошибка!\n"
-                 "⚠️ Свяжитесь с разработчиком!"
-        )
-    account = await client.get_me()
-    await AccountDAO.add_account(
-        session=session,
-        api_id=data["api_id"],
-        api_hash=data["api_hash"],
-        phone=data["phone"],
-        db_name=data["db_name"],
-        username=account.username or f"account_{account.id}",
-        fa2=data["password"],
-    )
     async with aiofiles.open(
         file=f"bot/dbs_users/{data['api_id']}_{data['api_hash']}.txt",
         mode="r",
