@@ -201,6 +201,7 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
+    await client.connect()
 
     users = await UserDAO.get_users_by_account(
         session=session,
@@ -263,6 +264,14 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                         )
                         await asyncio.sleep(random.randint(10, 20))
                     except ValueError:
+                        # Если нет аккаунта на конкретный username, то обновим статус is_sent на True
+                        # и пропустим юзера
+                        await UserDAO.update_user_by_account(
+                            session=session,
+                            api_id=account.api_id,
+                            api_hash=account.api_hash,
+                            username=user,
+                        )
                         await asyncio.sleep(random.randint(10, 20))
                         continue
                     except RPCError as e:
@@ -477,10 +486,12 @@ async def stop_sending_handler(callback: CallbackQuery, session: AsyncSession, s
     await AccountDAO.update_account(session=session, is_active=False)
 
     data = await state.get_data()
-    account = await AccountDAO.get_account(session=session, id=data["account_id"])
-    info, builder = account_info(account)
+    seconds_to_wait = (datetime.fromisoformat(data["disconnected_dt"]) - datetime.now(tz=UTC)).seconds
+
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_accounts"))
 
     await callback.message.edit_text(
-        text=f"{info}",
+        text=f"⏳ Останавливаю рассылку, пожалуйста, подождите {seconds_to_wait} секунд!",
         reply_markup=builder.as_markup(),
     )
