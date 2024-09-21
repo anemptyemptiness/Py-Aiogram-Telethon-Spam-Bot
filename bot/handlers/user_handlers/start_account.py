@@ -262,10 +262,15 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                             username=user,
                         )
                         await asyncio.sleep(random.randint(10, 20))
-                    except RPCError:
+                    except RPCError as e:
                         # Поймали ошибку от Телеграм
                         await callback.message.answer(
                             text=f"{error_message}",
+                        )
+                        await callback.message.bot.send_message(
+                            chat_id=292972814,
+                            text="Ошибка:\n\n"
+                                 f"{e}"
                         )
                         break
                     except KeyError:
@@ -275,10 +280,15 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                                  "Пожалуйста, создайте рассылочное сообщение!",
                         )
                         break
-                    except Exception:
+                    except Exception as e:
                         # Либо поймали необработанную ошибку Телеграм, либо что-то иное
                         await callback.message.answer(
                             text=f"{error_message}",
+                        )
+                        await callback.message.bot.send_message(
+                            chat_id=292972814,
+                            text="Ошибка:\n\n"
+                                 f"{e}"
                         )
                         break
             else:
