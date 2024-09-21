@@ -347,6 +347,8 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
+    await client.connect()
+    
     async with client:
         await client.log_out()
 
