@@ -19,7 +19,6 @@ from telethon.errors import FloodWaitError, RPCError
 from bot.callbacks.account import AccountCallback, PaginationCallbackData
 from bot.db.models import Account
 from bot.db.account.requests import AccountDAO
-from bot.db.sessions.requests import SessionDAO
 from bot.db.users.requests import UserDAO
 from bot.fsm.fsm import AccountInfoSG
 
@@ -72,13 +71,14 @@ async def paginator(session: AsyncSession, page: int = 0):
 
 def account_info(account: Account):
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="🔔 Начать рассылку", callback_data="start_sending"))
-    builder.row(InlineKeyboardButton(text="❌ Удалить аккаунт", callback_data="delete_account"))
-    builder.row(InlineKeyboardButton(text="📁 Поменять базу клиентов", callback_data="delete_users_db"))
-    builder.row(InlineKeyboardButton(text="💬 Сообщение рассылки", callback_data="spam_msg_info"))
 
     if account.is_active:
         builder.row(InlineKeyboardButton(text="Остановить рассылку", callback_data="stop_sending"))
+    else:
+        builder.row(InlineKeyboardButton(text="🔔 Начать рассылку", callback_data="start_sending"))
+        builder.row(InlineKeyboardButton(text="❌ Удалить аккаунт", callback_data="delete_account"))
+        builder.row(InlineKeyboardButton(text="📁 Поменять базу клиентов", callback_data="delete_users_db"))
+        builder.row(InlineKeyboardButton(text="💬 Сообщение рассылки", callback_data="spam_msg_info"))
 
     builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_accounts"))
 
@@ -199,127 +199,128 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
-    client.start(phone=account.phone, password=account.fa2)
+    await client.start(phone=account.phone, password=account.fa2)
 
     users = await UserDAO.get_users_by_account(
         session=session,
         api_id=account.api_id,
         api_hash=account.api_hash,
     )
-    await AccountDAO.update_account(session=session, is_active=True)
 
+    if not users:
+        await callback.message.answer(
+            text="Похоже, база клиентов для рассылки пустая 😓\n"
+                 "Пожалуйста, обновите/загрузите базу клиентов!"
+        )
+        return
+
+    if not account.spam_msg:
+        # Если нет спам-сообщения, то просим его создать
+        await callback.message.answer(
+            text="Нечего отправлять 😔\n"
+                 "Пожалуйста, создайте рассылочное сообщение!",
+        )
+        return
+
+    await AccountDAO.update_account(session=session, is_active=True, id=data["account_id"])
     info, builder = account_info(account)
     await callback.message.edit_text(
         text=f"{info}",
         reply_markup=builder.as_markup(),
     )
+
     count: int = 0
 
-    async with client:
-        if not users:
-            await callback.message.answer(
-                text="Похоже, база клиентов для рассылки пустая 😓\n"
-                     "Пожалуйста, обновите/загрузите базу клиентов!"
-            )
-
-        for user in users:
-            if count != 30:
-                if (await state.get_data()).get("is_disconnected", None):
-                    # Рассылку отменили -> отменяем эту функцию, чтобы не рассылать больше
-                    await state.update_data(is_disconnected=False)
-                    task = asyncio.current_task()
-                    task.cancel()
-                    return
-                else:
-                    count += 1
-                    try:
-                        if not account.spam_msg:
-                            # Если нет спам-сообщения, то просим его создать
-                            raise KeyError
+    for user in users:
+        if count != 30:
+            if (await state.get_data()).get("is_disconnected", None):
+                # Рассылку отменили -> отменяем эту функцию, чтобы не рассылать больше
+                await state.update_data(is_disconnected=False)
+                task = asyncio.current_task()
+                task.cancel()
+                return
+            else:
+                count += 1
+                try:
+                    async with client:
                         await client.send_message(
                             entity=f"{user}",
                             message=f"{account.spam_msg}",
                         )
-                        await UserDAO.update_user_by_account(
-                            session=session,
-                            api_id=account.api_id,
-                            api_hash=account.api_hash,
-                            username=user,
-                        )
-                        await asyncio.sleep(random.randint(10, 20))
-                    except FloodWaitError as flood:
-                        # Если получили флуд от Телеграм, то ждем, пока флуд спадёт
-                        await asyncio.sleep(flood.seconds + 1)
+                    await UserDAO.update_user_by_account(
+                        session=session,
+                        api_id=account.api_id,
+                        api_hash=account.api_hash,
+                        username=user,
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                except FloodWaitError as flood:
+                    # Если получили флуд от Телеграм, то ждем, пока флуд спадёт
+                    await asyncio.sleep(flood.seconds + 1)
+                    async with client:
                         await client.send_message(
                             entity=f"{user.strip()}",
                             message=f"{account.spam_msg}",
                         )
-                        await UserDAO.update_user_by_account(
-                            session=session,
-                            api_id=account.api_id,
-                            api_hash=account.api_hash,
-                            username=user,
-                        )
-                        await asyncio.sleep(random.randint(10, 20))
-                    except ValueError:
-                        # Если нет аккаунта на конкретный username, то обновим статус is_sent на True
-                        # и пропустим юзера
-                        await UserDAO.update_user_by_account(
-                            session=session,
-                            api_id=account.api_id,
-                            api_hash=account.api_hash,
-                            username=user,
-                        )
-                        await asyncio.sleep(random.randint(10, 20))
-                        continue
-                    except RPCError as e:
-                        # Поймали ошибку от Телеграм
-                        await callback.message.answer(
-                            text=f"{error_message}",
-                        )
-                        await callback.message.bot.send_message(
-                            chat_id=292972814,
-                            text="Ошибка:\n\n"
-                                 f"{e}"
-                        )
-                        await asyncio.sleep(random.randint(10, 20))
-                        continue
-                    except KeyError:
-                        # Просим создать спам-сообщение для рассылки
-                        await callback.message.answer(
-                            text="Нечего отправлять 😔\n"
-                                 "Пожалуйста, создайте рассылочное сообщение!",
-                        )
-                        break
-                    except Exception as e:
-                        # Либо поймали необработанную ошибку Телеграм, либо что-то иное
-                        await callback.message.answer(
-                            text=f"{error_message}",
-                        )
-                        await callback.message.bot.send_message(
-                            chat_id=292972814,
-                            text="Ошибка:\n\n"
-                                 f"{e}"
-                        )
-                        await asyncio.sleep(random.randint(10, 20))
-                        continue
-            else:
-                # Разослали 10 людям сообщение, спим 1.5 суток, чтобы аккаунт отдохнул,
-                # иначе Телеграм может дать бан за частую рассылку
-                await callback.message.answer(
-                    text=f"✅ Бот разослал сообщение {count} раз ({count} людей)\n"
-                         "💤 Бот в спячке на 1.5 дня (36 часов)"
-                )
+                    await UserDAO.update_user_by_account(
+                        session=session,
+                        api_id=account.api_id,
+                        api_hash=account.api_hash,
+                        username=user,
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                except ValueError:
+                    # Если нет аккаунта на конкретный username, то обновим статус is_sent на True
+                    # и пропустим юзера
+                    await UserDAO.update_user_by_account(
+                        session=session,
+                        api_id=account.api_id,
+                        api_hash=account.api_hash,
+                        username=user,
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                    continue
+                except RPCError as e:
+                    # Поймали ошибку от Телеграм
+                    await callback.message.answer(
+                        text=f"{error_message}",
+                    )
+                    await callback.message.bot.send_message(
+                        chat_id=292972814,
+                        text="Ошибка:\n\n"
+                             f"{e}"
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                    continue
+                except Exception as e:
+                    # Либо поймали необработанную ошибку Телеграм, либо что-то иное
+                    await callback.message.answer(
+                        text=f"{error_message}",
+                    )
+                    await callback.message.bot.send_message(
+                        chat_id=292972814,
+                        text="Ошибка:\n\n"
+                             f"{e}"
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                    continue
+        else:
+            # Разослали 10 людям сообщение, спим 1.5 суток, чтобы аккаунт отдохнул,
+            # иначе Телеграм может дать бан за частую рассылку
+            await callback.message.answer(
+                text=f"✅ Бот разослал сообщение {count} раз ({count} людей)\n"
+                     "💤 Бот в спячке на 1.5 дня (36 часов)"
+            )
 
-                count = 0
-                await asyncio.sleep(60 * 60 * 24 * 1.5)  # спим 1.5 дня (36 часов)
+            count = 0
+            await asyncio.sleep(60 * 60 * 24 * 1.5)  # спим 1.5 дня (36 часов)
 
         # Рассылка прошла успешно
         # или мы экстренно завершили её, потому что:
         # 1) нет рассылочного сообщения
         # 2) поймали ошибку от Телеграм
         # 3) поймали ошибку от aiogram/telethon/Python
-        await AccountDAO.update_account(session=session, is_active=False)
+        await AccountDAO.update_account(session=session, is_active=False, id=data["account_id"])
         info, builder = account_info(account)
         await callback.message.edit_text(
             text=f"{info}",
@@ -341,7 +342,6 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         api_hash=account.api_hash,
         system_version="4.16.30-vxCUSTOM",
     )
-    client.start(phone=account.phone, password=account.fa2)
 
     async with client:
         await client.log_out()
@@ -357,7 +357,7 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         # то собираем эти аккаунты в .txt и отправляем, чтобы дальше работать с ними
         async with aiofiles.open(
                 file=f"bot/dbs_users/saved_unsend_accounts/{account.api_id}_{account.api_hash}.txt",
-                mode="r+"
+                mode="w",
         ) as file:
             await file.writelines(map(lambda x: x + "\n", unsend_accounts))
         await callback.message.answer_document(
@@ -365,7 +365,6 @@ async def delete_account_handler(callback: CallbackQuery, session: AsyncSession,
         )
 
     await AccountDAO.delete_account(session=session, id=data["account_id"])
-    await SessionDAO.delete_session(api_id=account.api_id, phone=account.phone)
 
     await callback.message.answer(
         text=f"Аккаунт <b>@{account.username}</b> успешно удален ✅\n\n"
@@ -403,9 +402,23 @@ async def change_db_handler(message: Message, session: AsyncSession, state: FSMC
     )
 
     account = await AccountDAO.get_account(session=session, id=data["account_id"])
-    info, builder = account_info(account)
+    await UserDAO.delete_users_by_account(session=session, api_id=account.api_id, api_hash=account.api_hash)
 
-    await message.edit_text(
+    async with aiofiles.open(
+        file=f"bot/dbs_users/{account.api_id}_{account.api_hash}.txt",
+        mode="r",
+        encoding="utf-8",
+    ) as f:
+        users = [username.strip() for username in await f.readlines()]
+        await UserDAO.insert_users(
+            session=session,
+            users=users,
+            api_id=data['api_id'],
+            api_hash=data['api_hash'],
+        )
+
+    info, builder = account_info(account)
+    await message.answer(
         text=f"{info}",
         reply_markup=builder.as_markup(),
     )
@@ -449,7 +462,9 @@ async def change_spam_msg_cb_handler(callback: CallbackQuery, state: FSMContext)
 @router.message(StateFilter(AccountInfoSG.change_spam_msg), F.text)
 async def change_spam_msg_handler(message: Message, session: AsyncSession, state: FSMContext):
     await state.update_data(spam_msg=message.text.strip())
-    await AccountDAO.update_account(session=session, spam_msg=message.text.strip())
+    data = await state.get_data()
+
+    await AccountDAO.update_account(session=session, spam_msg=message.text.strip(), id=data["account_id"])
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_account_info"))
 
@@ -483,9 +498,9 @@ async def stop_sending_handler(callback: CallbackQuery, session: AsyncSession, s
         is_disconnected=True,
         disconnected_dt=(datetime.now(tz=UTC) + timedelta(seconds=20)).isoformat(),
     )
-    await AccountDAO.update_account(session=session, is_active=False)
 
     data = await state.get_data()
+    await AccountDAO.update_account(session=session, is_active=False, id=data["account_id"])
     seconds_to_wait = (datetime.fromisoformat(data["disconnected_dt"]) - datetime.now(tz=UTC)).seconds
 
     builder = InlineKeyboardBuilder()

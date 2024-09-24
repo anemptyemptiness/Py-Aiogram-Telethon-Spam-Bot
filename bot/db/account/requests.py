@@ -39,9 +39,10 @@ class AccountDAO:
     async def update_account(
             cls,
             session: AsyncSession,
+            id: int | str,
             **kwargs,
     ):
-        stmt = update(Account).values(**kwargs)
+        stmt = update(Account).values(**kwargs).where(Account.id == id)
         await session.execute(stmt)
         await session.commit()
 

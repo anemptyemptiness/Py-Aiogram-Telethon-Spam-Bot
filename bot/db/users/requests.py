@@ -1,4 +1,4 @@
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,5 +60,17 @@ class UserDAO:
                 User.account_id == account_id,
             )
         )
+        await session.execute(stmt)
+        await session.commit()
+
+    @classmethod
+    async def delete_users_by_account(
+            cls,
+            session: AsyncSession,
+            api_id: int | str,
+            api_hash: str,
+    ):
+        account_id = select(Account.id).filter_by(api_id=api_id, api_hash=api_hash).scalar_subquery()
+        stmt = delete(User).where(User.account_id == account_id)
         await session.execute(stmt)
         await session.commit()
