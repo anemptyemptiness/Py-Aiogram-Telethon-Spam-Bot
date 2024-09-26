@@ -14,3 +14,4 @@ class AccountInfoSG(StatesGroup):
     accounts = State()
     change_db = State()
     change_spam_msg = State()
+    change_spam_msg_2 = State()

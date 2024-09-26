@@ -14,6 +14,7 @@ class Account(Base):
     phone: Mapped[str] = mapped_column(unique=True)
     fa2: Mapped[str] = mapped_column(nullable=True, default=None)
     spam_msg: Mapped[str] = mapped_column(nullable=True, default="")
+    spam_msg_2: Mapped[str] = mapped_column(nullable=True, default="")
     is_active: Mapped[bool] = mapped_column(default=False)
     db_name: Mapped[str] = mapped_column(unique=True)
 

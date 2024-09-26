@@ -221,6 +221,13 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                  "Пожалуйста, создайте рассылочное сообщение!",
         )
         return
+    if not account.spam_msg_2:
+        # Если нет второго спам-сообщения, то просим его создать
+        await callback.message.answer(
+            text="У Вас не добавлено второе спам сообщение 😔\n"
+                 "Пожалуйста, создайте рассылочное сообщение!",
+        )
+        return
 
     await AccountDAO.update_account(session=session, is_active=True, id=data["account_id"])
     info, builder = account_info(account)
@@ -247,6 +254,11 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                             entity=f"{user}",
                             message=f"{account.spam_msg}",
                         )
+                        await asyncio.sleep(random.randint(5, 10))
+                        await client.send_message(
+                            entity=f"{user}",
+                            message=f"{account.spam_msg_2}",
+                        )
                     await UserDAO.update_user_by_account(
                         session=session,
                         api_id=account.api_id,
@@ -259,8 +271,13 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                     await asyncio.sleep(flood.seconds + 1)
                     async with client:
                         await client.send_message(
-                            entity=f"{user.strip()}",
+                            entity=f"{user}",
                             message=f"{account.spam_msg}",
+                        )
+                        await asyncio.sleep(random.randint(5, 10))
+                        await client.send_message(
+                            entity=f"{user}",
+                            message=f"{account.spam_msg_2}",
                         )
                     await UserDAO.update_user_by_account(
                         session=session,
@@ -439,14 +456,33 @@ async def spam_msg_info_handler(callback: CallbackQuery, session: AsyncSession, 
         await state.set_state(AccountInfoSG.change_spam_msg)
     else:
         builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="➡️ Второе спам сообщение", callback_data="second_spam_msg"))
         builder.row(InlineKeyboardButton(text="🔄 Изменить", callback_data="change_spam_msg"))
         builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_account_info"))
 
         await callback.message.answer(
-            text="Ваше рассылочное сообщение:\n\n"
+            text="Ваше <b>первое</b> рассылочное сообщение:\n\n"
                  f"{account.spam_msg}",
             reply_markup=builder.as_markup(),
         )
+
+
+@router.callback_query(StateFilter(AccountInfoSG.accounts), F.data == "second_spam_msg")
+async def second_spam_msg_handler(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete_reply_markup()
+    data = await state.get_data()
+    account = await AccountDAO.get_account(session=session, id=data["account_id"])
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🔄 Изменить", callback_data="change_spam_msg_2"))
+    builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="spam_msg_info"))
+
+    await callback.message.answer(
+        text="Ваше <b>второе</b> рассылочное сообщение:\n\n"
+             f"{account.spam_msg_2}",
+        reply_markup=builder.as_markup(),
+    )
 
 
 @router.callback_query(StateFilter(AccountInfoSG.accounts), F.data == "change_spam_msg")
@@ -465,11 +501,41 @@ async def change_spam_msg_handler(message: Message, session: AsyncSession, state
     data = await state.get_data()
 
     await AccountDAO.update_account(session=session, spam_msg=message.text.strip(), id=data["account_id"])
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="➡️ Второе спам сообщение", callback_data="second_spam_msg"))
+    builder.row(InlineKeyboardButton(text="🔄 Изменить", callback_data="change_spam_msg"))
+    builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_account_info"))
+
+    await message.answer(
+        text="Ваше <b>первое</b> рассылочное сообщение:\n\n"
+             f"{message.text.strip()}",
+        reply_markup=builder.as_markup(),
+    )
+    await state.set_state(AccountInfoSG.accounts)
+
+
+@router.callback_query(StateFilter(AccountInfoSG.accounts), F.data == "change_spam_msg_2")
+async def change_spam_msg_2_cb_handler(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.delete_reply_markup()
+    await callback.message.answer(
+        text="Пришлите мне в ответном сообщение оформленное сообщение для рассылки",
+    )
+    await state.set_state(AccountInfoSG.change_spam_msg_2)
+
+
+@router.message(StateFilter(AccountInfoSG.change_spam_msg_2), F.text)
+async def change_spam_msg_2_handler(message: Message, session: AsyncSession, state: FSMContext):
+    await state.update_data(spam_msg_2=message.text.strip())
+    data = await state.get_data()
+
+    await AccountDAO.update_account(session=session, spam_msg_2=message.text.strip(), id=data["account_id"])
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_account_info"))
 
     await message.answer(
-        text="Ваше рассылочное сообщение:\n\n"
+        text="Ваше второе рассылочное сообщение:\n\n"
              f"{message.text.strip()}",
         reply_markup=builder.as_markup(),
     )
