@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, FSInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from telethon import TelegramClient
@@ -299,6 +300,18 @@ async def start_sending_handler(callback: CallbackQuery, session: AsyncSession, 
                     continue
                 except RPCError as e:
                     # Поймали ошибку от Телеграм
+                    await callback.message.answer(
+                        text=f"{error_message}",
+                    )
+                    await callback.message.bot.send_message(
+                        chat_id=292972814,
+                        text="Ошибка:\n\n"
+                             f"{e}"
+                    )
+                    await asyncio.sleep(random.randint(10, 20))
+                    continue
+                except TelegramAPIError as e:
+                    # Либо поймали необработанную ошибку Телеграм, либо что-то иное
                     await callback.message.answer(
                         text=f"{error_message}",
                     )
